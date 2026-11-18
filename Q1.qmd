@@ -210,3 +210,101 @@ log2FoldChange ranges from about -7.3 to +3 across all tested genes
 Top up genes (higher in patients who responded) by fold change include MYH15 and WDR87 with high effect and sifnificance.
 
 Top down genes (higher in patients with disease progression ) include ALB, HABP2 and FGB.
+
+
+## Gene Set Enrichment Analysis (GSEA)
+```{r}
+library(fgsea)
+library(msigdbr)
+```
+
+#### Rank genes for the GSEA
+```{r}
+ranked_genes <- res$stat
+names(ranked_genes) <- rownames(res)
+
+# Remove missing values
+ranked_genes <- ranked_genes[!is.na(ranked_genes)]
+
+# Sort genes from highest to lowest
+ranked_genes <- sort(ranked_genes, decreasing = TRUE)
+
+# Inspect the ranked genes
+head(ranked_genes)
+```
+
+#### Verify the gene IDs are compatible with the gene sets
+```{r}
+head(names(ranked_genes))
+resultsNames(dds)
+```
+
+#### Load biological pathways
+```{r}
+gene_sets_df <- msigdbr(
+  species = "Homo sapiens",
+  category = "C5",
+  subcategory = "GO:BP"
+)
+
+gene_sets <- split(
+  gene_sets_df$gene_symbol,
+  gene_sets_df$gs_name
+)
+```
+
+```{r}
+head(gene_sets_df)
+length(gene_sets)
+```
+
+```{r}
+set.seed(42)
+
+fgsea_res <- fgsea(
+  pathways = gene_sets,
+  stats = ranked_genes,
+  nPermSimple = 10000
+)
+
+fgsea_res <- fgsea_res |>
+  dplyr::arrange(padj)
+```
+
+
+#### Visualize the top enriched pathway
+```{r}
+topPathways <- fgsea_res |>
+  dplyr::filter(!is.na(padj)) |>
+  dplyr::slice_min(padj, n = 10)
+
+ggplot(
+  topPathways,
+  aes(x = reorder(pathway, NES), y = NES, fill = NES > 0)
+) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("firebrick", "steelblue"),
+    labels = c(
+      "Progressive disease",
+      "Complete response"
+    ),
+    name = "Enriched in"
+  ) +
+  labs(
+    x = "Biological pathway",
+    y = "Normalized Enrichment Score (NES)",
+    title = "GSEA of anti-PD-L1 treatment response"
+  ) +
+  theme_minimal()
+```
+
+#### Identify the significant pathways
+```{r}
+significant_pathways <- fgsea_res |>
+  dplyr::filter(!is.na(padj), padj < 0.05) |>
+  dplyr::select(pathway, NES, padj, size)
+
+print(significant_pathways, n = 30)
+```
