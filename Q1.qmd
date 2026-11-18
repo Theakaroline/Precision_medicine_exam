@@ -1,0 +1,212 @@
+---
+title: "Q1"
+format: html
+editor: visual
+---
+
+# Problem statement
+
+*Which genes are differentially expressed between patients with complete response and patients with progressive disease following anti-PD-L1 treatment?*
+
+**Suggested tasks:**
+
+• Prepare and explore the gene-expression data, including appropriate filtering and
+
+normalization.
+
+• Perform differential expression analysis between responders/non-responder using
+
+DESeq2, and identify significantly differentially expressed genes
+
+• Visualize the results using e.g. volcano plots and heatmaps of selected genes.
+
+• Investigate the biological functions of differentially expressed genes and discuss their
+
+potential relevance to immunotherapy response.
+
+• Discuss the limitations of the analysis, including potential confounding factors and
+
+why differential expression does not necessarily imply a causal role in treatment
+
+response.
+
+## Load data
+
+```{r}
+library(tidyverse)
+library(DESeq2)
+```
+
+```{r}
+data <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
+```
+
+```{r}
+clinical <- data$clinical  
+counts <- data$counts      
+tpm <- data$tpm
+```
+
+## Clean data
+
+#### Check for overlapping samples
+
+Clinical
+
+```{r}
+head(clinical)
+```
+
+Counts
+
+```{r}
+dim(counts)
+```
+
+We don't use TPM for gene expression analysis
+
+```{r}
+overlapping_samples <- intersect(colnames(counts), clinical$sample_id)
+```
+
+The datasets are complete, all samples overlap.
+
+#### Check if the data is in the right format for DESeq2
+
+DESeq2 needs a wide count matrix: genes in rows, samples in columns.
+
+Counts matrix already has genes in rows and samples in columns.
+
+Clinical data already has sample id as row names, so we just need to convert R/NR to a factor
+
+```{r}
+clinical$BOR <- as.factor(clinical$BOR)
+```
+
+"NR" "R" confirms "NR" (progression disease) is the reference level, so all fold changes downstream mean “higher in patients who responded” when positive.
+
+```{r}
+levels(clinical$BOR)
+```
+
+Get a table of which and how many values there are in the BOR column
+
+```{r}
+table(clinical$BOR)
+```
+
+#### Make sure the sample ids are aligned
+
+DESeq2 does not check that.
+
+```{r}
+clinical <- clinical[overlapping_samples, ]
+counts <- counts[, overlapping_samples]
+```
+
+Check the sample order between the matrix and metadata
+
+```{r}
+colnames(counts) == rownames(clinical)
+```
+
+## DESeq2
+
+```{r}
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,
+  colData = clinical,
+  design = ~ BOR
+)
+```
+
+Compute, for each gene, the total read count summed across all 192 samples, and keeps only genes with at least 10 total reads.
+
+Genes below that are almost certainly too sparsely expressed to reach significance, and including them would waste statistical power (more tests means a harsher multiple-testing correction) without any real chance of a useful result.
+
+```{r}
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+```
+
+Removed 8084 elements
+
+```{r}
+dds <- DESeq(dds)
+```
+
+1.  size-factor normalization (adjusts for differing sequencing depth between samples),
+2.   per-gene dispersion (variance) estimation,
+3.   and a Wald test per gene for the BOR coefficient.
+
+```{r}
+res <- results(dds, alpha=0.05)
+```
+
+## DESeq2 results
+
+```{r}
+summary(res)
+```
+
+23000 genes\
+167 up\
+278 down
+
+## Volcano plot
+
+```{r}
+res_df <- as_data_frame(res) |>
+mutate(significant = padj < 0.05)
+```
+
+```{r}
+res_df_2 <- as_tibble(res, rownames = "gene") |>
+drop_na(padj, log2FoldChange) |>
+mutate(
+group = case_when(
+padj < 0.05 & log2FoldChange < 0 ~ "Up in patients with disease progression",
+padj < 0.05 & log2FoldChange > 0 ~ "Up in patients who responded",
+TRUE ~ "Not significant"
+)
+)
+top_labels <- res_df_2 |>
+filter(group != "Not significant") |>
+slice_min(padj, n = 10)
+ggplot(res_df_2, aes(x = log2FoldChange, y = -log10(padj))) +
+geom_point(aes(color = group)) +
+geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey40") +
+scale_color_manual(
+name = NULL,
+values = c(
+"Up in patients with disease progression" = "firebrick",
+"Up in patients who responded" = "steelblue",
+"Not significant" = "grey80"
+)
+) +
+geom_text(
+data = top_labels,
+aes(label = gene),
+size = 3,
+vjust = -0.6,
+check_overlap = TRUE
+) +
+labs(x = "Log2 Fold Change",
+y = "-Log10 Adjusted P-value",
+title = "Volcano Plot") +
+theme_minimal() +
+  theme(legend.position="bottom")
+```
+
+#### Results interpretation
+
+445 genes flagged significant ( padj \< 0.05)
+
+3571 genes have NA padj (independent filtering) and are dropped from the plot
+
+log2FoldChange ranges from about -7.3 to +3 across all tested genes
+
+Top up genes (higher in patients who responded) by fold change include MYH15 and WDR87 with high effect and sifnificance.
+
+Top down genes (higher in patients with disease progression ) include ALB, HABP2 and FGB.
