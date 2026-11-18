@@ -212,6 +212,74 @@ Top up genes (higher in patients who responded) by fold change include MYH15 and
 Top down genes (higher in patients with disease progression ) include ALB, HABP2 and FGB.
 
 
+## Heat map
+```{r}
+#| fig-width: 14
+#| fig-height: 7
+#| fig-align: center
+
+library(pheatmap)
+
+# Select the 20 most significant differentially expressed genes
+top_genes <- as.data.frame(res) |>
+  tibble::rownames_to_column("gene") |>
+  dplyr::filter(!is.na(padj), padj < 0.05) |>
+  dplyr::arrange(padj) |>
+  head(20) |>
+  dplyr::pull(gene)
+
+# Variance stabilizing transformation
+vsd <- vst(dds, blind = FALSE)
+
+# Extract expression values for selected genes
+heatmap_data <- assay(vsd)[top_genes, , drop = FALSE]
+
+# Order patients by treatment response
+sample_order <- order(colData(dds)$BOR)
+heatmap_data <- heatmap_data[, sample_order, drop = FALSE]
+
+# Create response group annotation
+annotation_col <- data.frame(
+  Response = colData(dds)$BOR[sample_order],
+  row.names = colnames(heatmap_data)
+)
+
+annotation_colors <- list(
+  Response = c(
+    "NR" = "#00BFC4",
+    "R" = "#F8766D"
+  )
+)
+
+# Standardize expression for each gene
+heatmap_scaled <- t(scale(t(heatmap_data)))
+
+# Limit extreme values for better visualization
+heatmap_scaled[heatmap_scaled > 2] <- 2
+heatmap_scaled[heatmap_scaled < -2] <- -2
+
+# Create heatmap
+pheatmap(
+  heatmap_scaled,
+  scale = "none",
+  color = colorRampPalette(
+    c("#2166AC", "white", "#B2182B")
+  )(100),
+  breaks = seq(-2, 2, length.out = 101),
+  annotation_col = annotation_col,
+  annotation_colors = annotation_colors,
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  gaps_col = sum(annotation_col$Response == "NR"),
+  show_colnames = FALSE,
+  fontsize_row = 10,
+  cellheight = 15,
+  border_color = NA,
+  main = "Top 20 Differentially Expressed Genes",
+  legend = TRUE
+)
+```
+
 ## Gene Set Enrichment Analysis (GSEA)
 ```{r}
 library(fgsea)
@@ -307,4 +375,20 @@ significant_pathways <- fgsea_res |>
   dplyr::select(pathway, NES, padj, size)
 
 print(significant_pathways, n = 30)
+```
+
+```{r}
+# Select the most significant pathway
+top_pathway <- fgsea_res |>
+  dplyr::filter(!is.na(padj)) |>
+  dplyr::arrange(padj) |>
+  dplyr::slice(1) |>
+  dplyr::pull(pathway)
+
+# Plot enrichment
+plotEnrichment(
+  gene_sets[[top_pathway]],
+  ranked_genes
+) +
+  labs(title = top_pathway)
 ```
