@@ -3,3 +3,6 @@ title: "data"
 format: html
 ---
 
+```{r}
+IMvigor210 <- readRDS("/home/projects/22123/IMvigor210_plain.rds")
+```
