@@ -1,0 +1,102 @@
+---
+title: "Q2"
+format: html
+---
+
+### Identify the 18 genes included in the published T-cell–inflamed GEP and examine their expression in the dataset
+
+18 genes included in the dataset
+
+```{r}
+
+GEP_genes <- c('CCL5', 'CD27', 'CD274', 'CD276', 'CD8A', 'CMKLR1', 'CXCL9', 'CXCR6', 'HLA-DQA1', 'HLA-DRB1', 'HLA-E', 'IDO1', 'LAG3', 'NKG7', 'PDCD1LG2','PSMB10', 'STAT1', 'TIGIT')
+```
+
+```{r}
+res_tcell <- res[rownames(res) %in% GEP_genes, ]
+
+res_tcell
+```
+
+```{r}
+res_tcell <- as.data.frame(res_tcell)
+```
+
+Genes with an adjusted p-value less than 0.05
+
+```{r}
+res_tcell_sig <- res_tcell[
+  !is.na(res_tcell$padj) & res_tcell$padj < 0.05,
+]
+
+res_tcell_sig
+```
+
+Genes with p-value \< 0.05 and log2Foldchange \> 0.5
+
+```{r}
+res_tcell_interesting <- res_tcell[
+  !is.na(res_tcell$pvalue) &
+  res_tcell$pvalue < 0.05 &
+  abs(res_tcell$log2FoldChange) > 0.5,
+]
+
+res_tcell_interesting
+
+```
+
+### Calculate a T-cell–inflamed GEP score for each patient.
+
+```{r}
+# 2. Get transformed expression values from DESeq2
+vsd <- vst(dds, blind = FALSE)
+expr <- assay(vsd)
+
+```
+
+```{r}
+# 3. Find which genes are present
+GEP_genes_present <- GEP_genes[GEP_genes %in% rownames(expr)]
+
+setdiff(GEP_genes, GEP_genes_present)
+
+```
+
+```{r}
+# 4. Extract the genes
+GEP_expr <- expr[GEP_genes_present, , drop = FALSE]
+GEP_expr
+```
+
+```{r}
+# 5. Standardize expression for each gene
+GEP_expr_scaled <- t(scale(t(GEP_expr)))
+GEP_expr_scaled
+```
+
+```{r}
+# 6. Calculate average expression score per patient
+GEP_scores <- colMeans(GEP_expr_scaled, na.rm = TRUE)
+GEP_scores
+```
+
+```{r}
+GEP_df <- data.frame(
+  Patient = colnames(expr),
+  BOR = colData(dds)$BOR,
+  GEP_score = GEP_scores
+)
+```
+
+```{r}
+GEP_df
+```
+
+```{r}
+boxplot(
+  GEP_score ~ BOR,
+  data = GEP_df,
+  xlab = "Best Overall Response",
+  ylab = "T-cell-inflamed GEP score"
+)
+```

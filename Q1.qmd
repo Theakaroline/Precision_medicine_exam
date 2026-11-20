@@ -136,11 +136,15 @@ dds <- DESeq(dds)
 ```
 
 1.  size-factor normalization (adjusts for differing sequencing depth between samples),
-2.   per-gene dispersion (variance) estimation,
-3.   and a Wald test per gene for the BOR coefficient.
+2.  per-gene dispersion (variance) estimation,
+3.  and a Wald test per gene for the BOR coefficient.
 
 ```{r}
 res <- results(dds, alpha=0.05)
+```
+
+```{r}
+
 ```
 
 ## DESeq2 results
@@ -211,8 +215,8 @@ Top up genes (higher in patients who responded) by fold change include MYH15 and
 
 Top down genes (higher in patients with disease progression ) include ALB, HABP2 and FGB.
 
-
 ## Heat map
+
 ```{r}
 #| fig-width: 14
 #| fig-height: 7
@@ -281,12 +285,14 @@ pheatmap(
 ```
 
 ## Gene Set Enrichment Analysis (GSEA)
+
 ```{r}
 library(fgsea)
 library(msigdbr)
 ```
 
 #### Rank genes for the GSEA
+
 ```{r}
 ranked_genes <- res$stat
 names(ranked_genes) <- rownames(res)
@@ -302,12 +308,14 @@ head(ranked_genes)
 ```
 
 #### Verify the gene IDs are compatible with the gene sets
+
 ```{r}
 head(names(ranked_genes))
 resultsNames(dds)
 ```
 
 #### Load biological pathways
+
 ```{r}
 gene_sets_df <- msigdbr(
   species = "Homo sapiens",
@@ -339,8 +347,8 @@ fgsea_res <- fgsea_res |>
   dplyr::arrange(padj)
 ```
 
-
 #### Visualize the top enriched pathway
+
 ```{r}
 topPathways <- fgsea_res |>
   dplyr::filter(!is.na(padj)) |>
@@ -369,6 +377,7 @@ ggplot(
 ```
 
 #### Identify the significant pathways
+
 ```{r}
 significant_pathways <- fgsea_res |>
   dplyr::filter(!is.na(padj), padj < 0.05) |>
