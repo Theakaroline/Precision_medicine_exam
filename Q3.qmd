@@ -1,0 +1,232 @@
+---
+title: "Q3"
+format: html
+editor: visual
+---
+
+# Problem Statement
+
+How do PD-1 (PDCD1) expression, immune-related gene signatures, and tumor mutational burden (TMB) compare in their association with different treatment responses?
+
+Suggested tasks:
+
+1.  Visualize the distribution of each biomarker in responders and non-responders using boxplots.
+
+2.  Perform appropriate statistical tests to investigate whether each biomarker differs significantly between response groups.
+
+3.  Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
+
+Explain the biological information captured by each biomarker and discuss their relative strengths and limitations.
+
+## Load Data
+
+```{r}
+#Q1 and Q2 must be run first
+
+library(ggplot2)
+```
+
+```{r}
+plot_Response_boxplot <- function(data, variable, y_label, test_result) {
+  ggplot(data, aes(x = Response, y = .data[[variable]])) +
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.12, alpha = 0.6) +
+    annotate(
+      "text",
+      x = Inf, y = Inf,
+      label = paste0("p = ", signif(test_result$p.value, 3)),
+      hjust = 1.1, vjust = 1.5
+    ) +
+    labs(
+      x = "Response class",
+      y = y_label
+    ) +
+    theme_minimal()
+}
+
+plot_association <- function(data, x, y, x_label, y_label, cor_test) {
+  rho <- unname(cor_test$estimate)
+
+  ggplot(data, aes(x = .data[[x]], y = .data[[y]])) +
+    geom_point(alpha = 0.7) +
+    geom_smooth(method = "lm", se = FALSE) +
+    annotate(
+      "text",
+      x = Inf, y = Inf,
+      label = paste0(
+        "Spearman rho = ", round(rho, 2),
+        "\np = ", signif(cor_test$p.value, 3)
+      ),
+      hjust = 1.1, vjust = 1.3
+    ) +
+    labs(
+      x = x_label,
+      y = y_label
+    ) +
+    theme_minimal()
+}
+
+calc_auc <- function(values, response) {
+  keep <- !is.na(values)
+  values <- values[keep]
+  response <- response[keep]
+
+  ranks <- rank(values)
+  n_R  <- sum(response == "R")
+  n_NR <- sum(response == "NR")
+
+  # Mann-Whitney U for the responders, divided by the number of R-NR pairs
+  (sum(ranks[response == "R"]) - n_R * (n_R + 1) / 2) / (n_R * n_NR)
+}
+```
+
+## Extract the three biomarkers
+
+```{r}
+# Tumor mutational burden (mutations per megabase). NA = missing, not zero
+TMB <- colData(dds)$TMB
+
+# Confirm that PDCD1 is present in the expression matrix.
+"PDCD1" %in% rownames(expr)
+
+# Extract PDCD1 expression.
+PD1 <- as.numeric(expr["PDCD1", ])
+
+# GEP score from Q2, check that the patient order is the same.
+stopifnot(identical(GEP_df$Patient, colnames(expr)))
+GEP_scores <- GEP_df$GEP_score
+
+summary(TMB)
+summary(PD1)
+summary(GEP_scores)
+```
+
+## Combine the biomarkers in one dataframe
+
+```{r}
+df <- data.frame(
+  sample = colnames(expr),
+  TMB = TMB,
+  PD1 = PD1,
+  GEP_scores = GEP_scores,
+  Response = factor(colData(dds)$BOR, levels = c("NR", "R"))
+)
+
+stopifnot(identical(df$sample, colnames(dds)))
+
+summary(df)
+table(df$Response, useNA = "ifany")
+
+# Number of patients with a TMB value in each response group
+table(Response = df$Response, TMB_available = !is.na(df$TMB))
+```
+
+## Are the biomarkers associated with response?
+
+For comparing continuous biomarkers that are not necessarily normally distributed between two independent groups, we are using the Wilcoxon rank-sum test, which automatically leaves out patients with a missing value.
+
+```{r}
+TMB_Response_test <- wilcox.test(TMB ~ Response, data = df)
+PD1_Response_test <- wilcox.test(PD1 ~ Response, data = df)
+GEP_Response_test <- wilcox.test(GEP_scores ~ Response, data = df)
+
+TMB_Response_test
+PD1_Response_test
+GEP_Response_test
+```
+
+```{r}
+plot_Response_boxplot(df[!is.na(df$TMB), ], "TMB", "Tumor mutational burden (mut/Mb)", TMB_Response_test)
+plot_Response_boxplot(df, "PD1", "PDCD1 expression (VST)", PD1_Response_test)
+plot_Response_boxplot(df, "GEP_scores", "T cell–inflamed GEP score", GEP_Response_test)
+```
+
+## Compare direction and magnitude
+
+The three biomarkers are measured in different units (mutations per megabase, VST expression, and a z-score average), so their raw differences cannot be compared directly. We use then:
+
+-   the median in each group and the direction of the difference (higher in R or in NR),
+-   the AUC, which is unit-free: 0.5 means no separation between the groups, 1.0 means that every responder has a higher value than every non-responder, and values below 0.5 mean that the biomarker is higher in non-responders,
+-   p-values adjusted for testing three biomarkers (Benjamini–Hochberg).
+
+```{r}
+biomarkers <- c("TMB", "PD1", "GEP_scores")
+tests <- list(TMB_Response_test, PD1_Response_test, GEP_Response_test)
+
+comparison <- data.frame(
+  biomarker = biomarkers,
+  n = sapply(biomarkers, function(b) sum(!is.na(df[[b]]))),
+  median_NR = sapply(biomarkers, function(b) median(df[[b]][df$Response == "NR"], na.rm = TRUE)),
+  median_R  = sapply(biomarkers, function(b) median(df[[b]][df$Response == "R"],  na.rm = TRUE)),
+  AUC = sapply(biomarkers, function(b) calc_auc(df[[b]], df$Response)),
+  p_value = sapply(tests, function(t) t$p.value)
+)
+
+comparison$higher_in <- ifelse(comparison$median_R > comparison$median_NR, "R", "NR")
+comparison$p_adjusted <- p.adjust(comparison$p_value, method = "BH")
+
+rownames(comparison) <- NULL
+comparison[, c("median_NR", "median_R", "AUC")] <- round(comparison[, c("median_NR", "median_R", "AUC")], 2)
+comparison$p_value <- signif(comparison$p_value, 3)
+comparison$p_adjusted <- signif(comparison$p_adjusted, 3)
+
+comparison
+```
+
+```{r}
+ggplot(comparison, aes(x = reorder(biomarker, AUC), y = AUC)) +
+  geom_col() +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  coord_flip(ylim = c(0, 1)) +
+  labs(
+    x = "Biomarker",
+    y = "AUC (0.5 = no separation)"
+  ) +
+  theme_minimal()
+```
+
+## How are the biomarkers related to each other?
+
+We use Spearman correlation, which measures a monotonic association without assuming a linear relationship or normally distributed variables. This shows whether the biomarkers capture the same or different biological information.
+
+```{r}
+PD1_GEP_cor <- cor.test(df$PD1, df$GEP_scores, method = "spearman", exact = FALSE)
+TMB_GEP_cor <- cor.test(df$TMB, df$GEP_scores, method = "spearman", exact = FALSE)
+TMB_PD1_cor <- cor.test(df$TMB, df$PD1, method = "spearman", exact = FALSE)
+
+PD1_GEP_cor
+TMB_GEP_cor
+TMB_PD1_cor
+```
+
+```{r}
+plot_association(df, "PD1", "GEP_scores", "PDCD1 expression (VST)", "T cell–inflamed GEP score", PD1_GEP_cor)
+plot_association(df[!is.na(df$TMB), ], "TMB", "GEP_scores", "Tumor mutational burden", "T cell–inflamed GEP score", TMB_GEP_cor)
+plot_association(df[!is.na(df$TMB), ], "TMB", "PD1", "Tumor mutational burden", "PDCD1 expression (VST)", TMB_PD1_cor)
+```
+
+# Interpretation
+
+All three biomarkers are significantly higher in responders than in non-responders. TMB shows the strongest association, followed by the GEP and PDCD1, which perform similarly.
+
+However, the distributions overlap substantially and the AUCs (0.7–0.8) indicate only moderate separation, so no single biomarker can reliably classify individual patients. PDCD1 and the GEP are strongly correlated and therefore largely capture the same biology, namely T-cell infiltration. In contrast, TMB is not correlated with either and provides independent, tumor-intrinsic information. Combining TMB with the GEP could therefore identify responders better than either biomarker alone.
+
+What biological information does each biomarker capture?
+
+-   TMB reflects how many mutations the tumor carries. More mutations may generate more tumor-specific neoantigens that T cells can recognize, so TMB measures how "visible" the tumor could be to the immune system.
+-   PD-1 (PDCD1) is an inhibitory receptor expressed on activated and exhausted T cells. Its expression indicates that T cells are present and engaged in a checkpoint-regulated immune state.
+-   The T cell–inflamed GEP combines 18 genes related to cytotoxic cells, IFN-γ signalling, antigen presentation and checkpoints. It measures whether an active, inflamed immune response is present in the tumor.
+
+What are the strengths and limitations of each biomarker?
+
+-   TMB: biologically independent of the immune infiltrate, so it adds different information from the expression markers, and it is measured from DNA, which is stable.
+
+    Limitations: not every mutation creates an immunogenic neoantigen, it is missing for some patients. Values depend on the sequencing panel and on tumor purity (fewer tumor cells make mutations harder to detect) and a high TMB does not mean that T cells actually reach the tumor.
+
+-   PD-1 expression: a simple single-gene measurement directly related to the checkpoint pathway.
+
+    Limitations: PD-1 is expressed on both activated and exhausted T cells, a single gene is more sensitive to measurement noise and the drug in this study targets PD-L1, the ligand, not PD-1 itself.
+
+-   GEP**:** summarizes a coordinated biological program across many genes, so it is more robust to noise in any one gene.
+
+    Limitations: our score is a simplified, unweighted version of the published algorithm, z-scores are relative to this cohort, so a score cannot be transferred directly to another dataset. It depends on the cellular composition of the biopsy and it cannot show whether T cells are in contact with tumor cells.
