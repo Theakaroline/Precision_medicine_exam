@@ -1,0 +1,157 @@
+---
+title: "Q4"
+format: html
+---
+
+# Problem Statement
+
+How might differences in tumor purity influence the expression of immune- related biomarkers and their observed associations with treatment response?
+
+Suggested tasks:
+
+• Discuss how tumor purity may influence PD-1 expression and T-cell–inflamed GEP scores measured using bulk RNA-seq.
+
+• Consider whether differences in tumor purity could partly explain the associations observed in RQ2 and RQ3.
+
+• Discuss whether adjusting for tumor purity would necessarily improve the interpretation of these biomarkers
+
+## Influence of tumor purity on different Biomarkers
+
+summary tumor purity in bulk RNA seq
+
+inlfuence of purity on PD-1 expression
+
+influence of purity on GEP scores
+
+## Investigate tumor purity in data
+
+### Calculate Tumor Purity per sample
+
+```{r}
+library(immunedeconv)
+library(limma)
+```
+
+The package 'immunedeconv' can estimate the tumor purity from the expression matrix. The expression matrix needs to have genes in rows and samples in the columns. This is already the case in our data.
+
+We are using the expression matrix from the DeSeq run, because ...
+
+```{r}
+# use the ESTIMATE algorithm to obtain a tumor purity estimation
+tumor_purity_expr <- deconvolute_estimate(expr)
+
+# transform the ESTIMATE results, so it is joinable with the other biomarkers
+tumor_purity_expr_t <- data.frame(t(tumor_purity_expr)) %>% select(TumorPurity) %>% rownames_to_column(var = 'sample')
+
+# Quick exploration of the estimated tumor purity across all samples
+summary(tumor_purity_expr_t$TumorPurity)
+```
+
+```{r}
+# join the tumor purity estimate with the biomarkers from Q3
+df <- df %>% left_join(tumor_purity_expr_t, by = 'sample')
+
+# check if the join worked correctly, so that all samples have a tumor purity estimation
+df %>% filter(is.na(TumorPurity))
+```
+
+### Correlation of Tumor Purity with the Biomarkers
+
+Calculate Correlation for the Biomarkers from Q2 and Q3.
+
+```{r}
+cor_tmb_purity <- cor.test(
+  df$TumorPurity, df$TMB,
+  method = "spearman",
+  exact = FALSE,
+  use = "complete.obs"
+)
+
+cor_pd1_purity <- cor.test(
+  df$TumorPurity, df$PD1,
+  method = "spearman",
+  exact = FALSE,
+  use = "complete.obs"
+)
+
+cor_gep_purity <- cor.test(
+  df$TumorPurity, df$GEP_scores,
+  method = "spearman",
+  exact = FALSE,
+  use = "complete.obs"
+)
+
+```
+
+Correlation results:
+
+```{r}
+cor_tmb_purity
+cor_pd1_purity
+cor_gep_purity
+```
+
+Plot correlation with the helper function from the exercises.
+
+```{r}
+plot_association(df, 'TumorPurity', 'TMB', 'Tumor Purity', 'Tumor Mutational Burden', cor_tmb_purity)
+plot_association(df, 'TumorPurity', 'PD1', 'Tumor Purity', 'PD-1 expression', cor_pd1_purity)
+plot_association(df, 'TumorPurity', 'GEP_scores', 'Tumor Purity', 'GEP score', cor_gep_purity)
+```
+
+Interpretation of the correlations:
+
+TODO
+
+## Correction for Tumor Purity
+
+```{r}
+# adjust for tumor purity with the removeBatchEffect function from limma
+sum(df$sample == colnames(expr))# double check the sample order is equal
+expr_adj <- removeBatchEffect(expr, covariates = matrix(df$TumorPurity, ncol= 1))
+
+# recalculate GEP scores, same as from step 3 in Q2
+GEP_genes_present <- GEP_genes[GEP_genes %in% rownames(expr_adj)]
+setdiff(GEP_genes, GEP_genes_present)
+# 4. Extract the genes
+GEP_expr_adj <- expr[GEP_genes_present, , drop = FALSE]
+# 5. Standardize expression for each gene
+GEP_expr_adj_scaled <- t(scale(t(GEP_expr_adj)))
+# 6. Calculate average expression score per patient
+GEP_scores_adj <- colMeans(GEP_expr_adj_scaled, na.rm = TRUE)
+
+# collect all biomarker information in one df
+# We leave TMB out, since this has not been subjected to the adjustment and we want to investigate the change before and after adjustment
+df_adj <- data.frame(
+  sample = df$sample,
+  PD1 = as.numeric(expr_adj['PDCD1', ]),
+  GEP = GEP_scores_adj,
+  Response = df$Response
+)
+
+# sanity check
+stopifnot(identical(df_adj$sample, colnames(expr_adj)))
+```
+
+#### Association with Response
+
+same principle as Q3 'Are the biomarkers associated with response?'
+
+```{r}
+PD1_adj_Response_test <- wilcox.test(PD1 ~ Response, data = df_adj)
+GEP_adj_Response_test <- wilcox.test(GEP ~ Response, data = df_adj)
+
+PD1_adj_Response_test
+GEP_adj_Response_test
+```
+
+```{r}
+plot_Response_boxplot(df_adj, "PD1", "PDCD1 expression (VST)", PD1_adj_Response_test)
+plot_Response_boxplot(df_adj, "GEP", "T cell–inflamed GEP score", GEP_adj_Response_test)
+```
+
+Difference to unadjusted: TODO
+
+## Would adjustment help with interpretation
+
+TODO
