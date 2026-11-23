@@ -17,11 +17,15 @@ Suggested tasks:
 
 ## Influence of tumor purity on different Biomarkers
 
-summary tumor purity in bulk RNA seq
+In bulk RNA sequencing, RNA is extracted from all cells in a sample and measured as a single pooled signal. The cellular origin of individual transcripts, and the cell-type composition of the sample cannot be observed directly. In tumor samples, this means the proportion of malignant cells is unknown. Tumor tissue typically also contains non-tumor cells, such as immune cells and stromal cells which are present in the tumor microenvironment, that also contribute to the measured expression profile. Tumor purity describes the fraction of malignant cells in a sample and can be estimated indirectly from the extent of immune and stromal infiltration. The ESTIMATE algorithm, which is also utilized in this script, performs this estimation and returns both non-tumor score for immune and stromal expression, and the tumor purity estimation.
 
-inlfuence of purity on PD-1 expression
+Influence of tumor purity on PD-1 expression:
 
-influence of purity on GEP scores
+PD-1 is an immune checkpoint receptor found mainly on activated T cells. When it binds its ligand PD-L1, the T cell reduces its activity. Many tumors make use of this mechanism by expressing PD-L1, which helps them escape the immune response. PD-1 is mostly expressed by T cells, so its transcript level mainly reflects how many T cells have infiltrated the tumor. If tumor purity is high, there are less malignant cells in the sample, so less T cells, so the expression of PD-1 is expected to be lower. On the other hand, if the tumor purity is low, there might be more T cells present in the tumor, so the PD-1 expression is potentially higher.
+
+Influence of tumor purity on GEP scores:
+
+The GEP score is based on a set of genes that are highly expressed in inflamed tissue and by T cells. Because these genes are mainly expressed by infiltrating immune cells, the GEP score is expected to correlate negatively with tumor purity. In samples consisting mostly of cancer cells, the expression of T-cell- and inflammation-associated genes should be low. In samples with a larger share of infiltrating immune cells, the GEP score is expected to be higher. This relationship is not strict, however, since a tumor can show high purity and still be inflamed.
 
 ## Investigate tumor purity in data
 
@@ -34,7 +38,7 @@ library(limma)
 
 The package 'immunedeconv' can estimate the tumor purity from the expression matrix. The expression matrix needs to have genes in rows and samples in the columns. This is already the case in our data.
 
-We are using the expression matrix from the DeSeq run, because ...
+We used the normalized expression matrix from the DESeq2 run, since the size-factor normalization makes expression values comparable across samples by correcting for differences in sequencing depth.
 
 ```{r}
 # use the ESTIMATE algorithm to obtain a tumor purity estimation
@@ -101,7 +105,9 @@ plot_association(df, 'TumorPurity', 'GEP_scores', 'Tumor Purity', 'GEP score', c
 
 Interpretation of the correlations:
 
-TODO
+The TMB showed a very weak and also insignificant correlation with the tumor purity. This is reasonable, since TMB does not scale with the amount of cancer cells, it rather is a measure in the genome itself.
+
+Both PD-1 expression and GEP score show a strong and significant correlation with tumor purity. This is expected as discussed before.
 
 ## Correction for Tumor Purity
 
@@ -113,15 +119,15 @@ expr_adj <- removeBatchEffect(expr, covariates = matrix(df$TumorPurity, ncol= 1)
 # recalculate GEP scores, same as from step 3 in Q2
 GEP_genes_present <- GEP_genes[GEP_genes %in% rownames(expr_adj)]
 setdiff(GEP_genes, GEP_genes_present)
-# 4. Extract the genes
+## 4. Extract the genes
 GEP_expr_adj <- expr[GEP_genes_present, , drop = FALSE]
-# 5. Standardize expression for each gene
+## 5. Standardize expression for each gene
 GEP_expr_adj_scaled <- t(scale(t(GEP_expr_adj)))
-# 6. Calculate average expression score per patient
+## 6. Calculate average expression score per patient
 GEP_scores_adj <- colMeans(GEP_expr_adj_scaled, na.rm = TRUE)
 
 # collect all biomarker information in one df
-# We leave TMB out, since this has not been subjected to the adjustment and we want to investigate the change before and after adjustment
+## We leave TMB out, since this has not been subjected to the adjustment and we want to investigate the change before and after adjustment
 df_adj <- data.frame(
   sample = df$sample,
   PD1 = as.numeric(expr_adj['PDCD1', ]),
@@ -150,8 +156,8 @@ plot_Response_boxplot(df_adj, "PD1", "PDCD1 expression (VST)", PD1_adj_Response_
 plot_Response_boxplot(df_adj, "GEP", "T cell–inflamed GEP score", GEP_adj_Response_test)
 ```
 
-Difference to unadjusted: TODO
+After adjustment for tumor purity, PD-1 expression and GEP scores differed only minimally between responders and non-responders, and the significance of the difference remained unchanged. This suggests that tumor purity does not act as a relevant confounder for the association between these markers and response in this cohort.
 
 ## Would adjustment help with interpretation
 
-TODO
+TODOs
