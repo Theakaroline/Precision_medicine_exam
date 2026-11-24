@@ -59,6 +59,15 @@ df <- df %>% left_join(tumor_purity_expr_t, by = 'sample')
 df %>% filter(is.na(TumorPurity))
 ```
 
+Difference of tumor purity in responders vs non-responder:
+
+```{r}
+purity_response_test <- wilcox.test(TumorPurity ~ Response, data = df)
+plot_Response_boxplot(df, "TumorPurity", "Tumor Purity", purity_response_test)
+```
+
+This wilcoxon test, show that the difference in tumor purity between responders and non-responders is not significant.
+
 ### Correlation of Tumor Purity with the Biomarkers
 
 Calculate Correlation for the Biomarkers from Q2 and Q3.
@@ -98,7 +107,7 @@ cor_gep_purity
 Plot correlation with the helper function from the exercises.
 
 ```{r}
-plot_association(df, 'TumorPurity', 'TMB', 'Tumor Purity', 'Tumor Mutational Burden', cor_tmb_purity)
+plot_association(df[!is.na(df$TMB), ], 'TumorPurity', 'TMB', 'Tumor Purity', 'Tumor Mutational Burden', cor_tmb_purity)
 plot_association(df, 'TumorPurity', 'PD1', 'Tumor Purity', 'PD-1 expression', cor_pd1_purity)
 plot_association(df, 'TumorPurity', 'GEP_scores', 'Tumor Purity', 'GEP score', cor_gep_purity)
 ```
@@ -108,6 +117,10 @@ Interpretation of the correlations:
 The TMB showed a very weak and also insignificant correlation with the tumor purity. This is reasonable, since TMB does not scale with the amount of cancer cells, it rather is a measure in the genome itself.
 
 Both PD-1 expression and GEP score show a strong and significant correlation with tumor purity. This is expected as discussed before.
+
+In Q2, we stated that a higher GEP score is associated with a greater likelihood of treatment response for anti-PD-L1 therapy. Here, we showed that a higher GEP score is correlated with a low tumor purity. This indicates an indirect relationship of the treatment response with tumor purity, throught the GEP score.
+
+In Q3, TMB, PD-1 expression and GEP scores differed significantly between responders and non-responders. Although tumor purity correlated strongly with both PD-1 expression and GEP scores, it did not differ significantly between the responder groups. This suggests that these differences are not explained by tumor purity. This can be further investigated by correcting for the tumor purity.
 
 ## Correction for Tumor Purity
 
@@ -160,4 +173,10 @@ After adjustment for tumor purity, PD-1 expression and GEP scores differed only 
 
 ## Would adjustment help with interpretation
 
-TODOs
+Whether adjustment for tumor purity is appropriate depends on the aim of the analysis.
+
+If the aim is to identify genes expressed by the malignant cells, for example to find potential target antigens for CAR T-cell therapy, correcting for purity helps to reduce the contribution of non-malignant cells.
+
+If the aim is to characterize the tumor microenvironment, for example to assess whether the tumor triggers an immune response and whether inflammation is ongoing, the immune signal is itself informative and should not be removed.
+
+In this project, we investigated biomarkers associated with response to anti-PD-1 therapy. Although the biomarkers correlated strongly with tumor purity, the differences between responders and non-responders remained unchanged after adjustment. Here, the information on T-cell presence was relevant, as it suggests that the tumor may suppress an existing T-cell response through the PD-1/PD-L1 pathway.
