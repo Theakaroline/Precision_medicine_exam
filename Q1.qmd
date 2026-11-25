@@ -297,8 +297,11 @@ library(msigdbr)
 ranked_genes <- res$stat
 names(ranked_genes) <- rownames(res)
 
-# Remove missing values
+# Remove missing values, empty gene names and duplicated gene names
 ranked_genes <- ranked_genes[!is.na(ranked_genes)]
+ranked_genes <- ranked_genes[!is.na(names(ranked_genes)) & names(ranked_genes) != ""]
+ranked_genes <- ranked_genes[order(abs(ranked_genes), decreasing = TRUE)]
+ranked_genes <- ranked_genes[!duplicated(names(ranked_genes))]
 
 # Sort genes from highest to lowest
 ranked_genes <- sort(ranked_genes, decreasing = TRUE)
@@ -401,3 +404,27 @@ plotEnrichment(
 ) +
   labs(title = top_pathway)
 ```
+
+## Biological interpretation
+
+MYH15 is involved in motor activity, while the biological function of WDR87 is less well characterized. Both genes show higher expression in responders.
+
+ALB is involved in molecular transport, while HABP2 and FGB are associated with blood coagulation. These genes show higher expression in non-responders.
+
+The enrichment of cell-cycle and DNA repair pathways in responders may reflect differences in tumor or immune-cell proliferation. Biological adhesion in non-responders may be related to interactions within the tumor microenvironment, potentially influencing immune-cell infiltration.
+
+## Limitations
+
+Potential confounding factors, such as age, sex, tumor characteristics and previous treatments, are not accounted for in the DESeq2 analysis.
+
+Differences in group sizes may affect statistical power. Furthermore, bulk RNA sequencing cannot distinguish between changes in gene expression within individual cells and differences in cellular composition.
+
+Several enriched pathways may contain overlapping genes and therefore do not necessarily represent independent biological processes.
+
+Differential expression and pathway enrichment indicate an association with treatment response but do not imply causation. Further experimental validation is needed.
+
+## Conclusion
+
+445 genes were significantly differentially expressed between responders and non-responders, with 167 showing higher expression in responders and 278 in non-responders.
+
+GSEA identified differences in biological processes associated with cell-cycle regulation, DNA repair and biological adhesion. These processes may be associated with response to anti-PD-L1 treatment, but a causal relationship cannot be established.
