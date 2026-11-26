@@ -12,7 +12,7 @@ Suggested tasks:
 
 1.  Visualize the distribution of each biomarker in responders and non-responders using boxplots.
 
-2.  Perform appropriate statistical tests to investigate whether each biomarker differs significantly between response groups.
+2.  Perform appropriate statistical tests to investigate whether each biomarker differs significantly between response groups**.**
 
 3.  Compare the direction and magnitude of the observed differences, and discuss which biomarkers show stronger associations with treatment response.
 
@@ -83,7 +83,7 @@ calc_auc <- function(values, response) {
 ## Extract the three biomarkers
 
 ```{r}
-# Tumor mutational burden (mutations per megabase). NA = missing, not zero
+# Tumor mutational burden.
 TMB <- colData(dds)$TMB
 
 # Confirm that PDCD1 is present in the expression matrix.
@@ -123,7 +123,7 @@ table(Response = df$Response, TMB_available = !is.na(df$TMB))
 
 ## Are the biomarkers associated with response?
 
-For comparing continuous biomarkers that are not necessarily normally distributed between two independent groups, we are using the Wilcoxon rank-sum test, which automatically leaves out patients with a missing value.
+For comparing continuous biomarkers that are not normally distributed between two independent groups, we are using the Wilcoxon rank-sum test. It automatically leaves out patients with a missing value.
 
 ```{r}
 TMB_Response_test <- wilcox.test(TMB ~ Response, data = df)
@@ -143,10 +143,10 @@ plot_Response_boxplot(df, "GEP_scores", "T cell–inflamed GEP score", GEP_Respo
 
 ## Compare direction and magnitude
 
-The three biomarkers are measured in different units (mutations per megabase, VST expression, and a z-score average), so their raw differences cannot be compared directly. We use then:
+The three biomarkers are measured in different units (mutations per megabase, VST expression, and a z-score average), so their differences cannot be compared directly. We use then:
 
--   the median in each group and the direction of the difference (higher in R or in NR),
--   the AUC, which is unit-free: 0.5 means no separation between the groups, 1.0 means that every responder has a higher value than every non-responder, and values below 0.5 mean that the biomarker is higher in non-responders,
+-   the median in each group and the direction of the difference (higher in R or in NR).
+-   the AUC, which is unit-free: 0.5 means no separation between the groups, 1.0 means that every responder has a higher value than every non-responder, and values below 0.5 mean that the biomarker is higher in non-responders.
 -   p-values adjusted for testing three biomarkers (Benjamini–Hochberg).
 
 ```{r}
@@ -187,7 +187,7 @@ ggplot(comparison, aes(x = reorder(biomarker, AUC), y = AUC)) +
 
 ## How are the biomarkers related to each other?
 
-We use Spearman correlation, which measures a monotonic association without assuming a linear relationship or normally distributed variables. This shows whether the biomarkers capture the same or different biological information.
+We use Spearman correlation, which measures without assuming a linear relationship or normally distributed variables. This shows whether the biomarkers capture the same or different biological information.
 
 ```{r}
 PD1_GEP_cor <- cor.test(df$PD1, df$GEP_scores, method = "spearman", exact = FALSE)
@@ -207,21 +207,31 @@ plot_association(df[!is.na(df$TMB), ], "TMB", "PD1", "Tumor mutational burden", 
 
 # Interpretation
 
-All three biomarkers are significantly higher in responders than in non-responders. TMB shows the strongest association, followed by the GEP and PDCD1, which perform similarly.
+-   Do all the biomarkers differ significantly between response groups?
 
-However, the distributions overlap substantially and the AUCs (0.7–0.8) indicate only moderate separation, so no single biomarker can reliably classify individual patients. PDCD1 and the GEP are strongly correlated and therefore largely capture the same biology, namely T-cell infiltration. In contrast, TMB is not correlated with either and provides independent, tumor-intrinsic information. Combining TMB with the GEP could therefore identify responders better than either biomarker alone.
+    Yes, all three biomarkers are significantly higher in responders than in non-responders (p-values far below 0.05 for all 3 of them), so the difference is not due to chance. Moreover, they are all adjusted after applying Benjamini-Hochberg adjustment due to performing three tests instead of one. The direction is the same for all of them and the results are in line with biological reason as tumors with more mutations and more T cells respond better.
 
-What biological information does each biomarker capture?
+-   Which biomarker shows the strongest association with response?
 
--   TMB reflects how many mutations the tumor carries. More mutations may generate more tumor-specific neoantigens that T cells can recognize, so TMB measures how "visible" the tumor could be to the immune system.
--   PD-1 (PDCD1) is an inhibitory receptor expressed on activated and exhausted T cells. Its expression indicates that T cells are present and engaged in a checkpoint-regulated immune state.
--   The T cell–inflamed GEP combines 18 genes related to cytotoxic cells, IFN-γ signalling, antigen presentation and checkpoints. It measures whether an active, inflamed immune response is present in the tumor.
+    TMB shows the strongest association. Responders have about twice the value of the non-responders and it also has the highest AUC (O.79). Following closely behind is GEP (0.73) and then PD-1(0.72). However, all of them are between 0.7-0.8 which doesn't mean perfect separation and in the box plots the R and the NR overlap significantly. Some responders have low values while some non-responders show high values of all three biomarkers. Therefore, none biomarker is good enough and reliable on it's own to be the deciding factor of treatment for a patient.
+
+-   Do biomarkers carry the same information?
+
+    PDCD1 expression and the GEP are strongly correlated (ρ=0.89). This shows the fact that both of them capture largely the same biology, how many activated T cells are present in the tumor. This is why their AUC are very similar as well. On the other hand, TMB is not correlated with either and provides independent information. Combining TMB with the GEP could therefore identify responders better than either biomarker alone.
+
+-   What biological information does each biomarker capture?
+
+    TMB shows the number acquired somatic mutations present in a tumor. More mutations may generate more neoantigens that T cells can recognize, so TMB measures how "visible" the tumor could be to the immune system.
+
+    PD-1 (PDCD1) is an inhibitory receptor expressed on immune cells, particularly activated T cells. Its expression can indicate that T cells are present in the tumor microenvironment and therefore provide information of its immune state and its response to checkpoint inhibition.
+
+    The T cell–inflamed GEP combines the expression of 18 known genes related to T cell activity and inflamed tumor microenvironment. It measures whether an active, inflamed immune response is present in the tumor.
 
 What are the strengths and limitations of each biomarker?
 
--   TMB: biologically independent of the immune infiltrate, so it adds different information from the expression markers, and it is measured from DNA, which is stable.
+-   TMB: it is measured from DNA, which is stable and independent from the immune infiltration.
 
-    Limitations: not every mutation creates an immunogenic neoantigen, it is missing for some patients. Values depend on the sequencing panel and on tumor purity (fewer tumor cells make mutations harder to detect) and a high TMB does not mean that T cells actually reach the tumor.
+    Limitations: not every mutation creates an immunogenic neoantigen (in this case it was missing for 42 patients). It depents on antigen presentation, therefore it does not guarantee immune response nor a high TMB means that the T cells can actually reach the tumor.
 
 -   PD-1 expression: a simple single-gene measurement directly related to the checkpoint pathway.
 
