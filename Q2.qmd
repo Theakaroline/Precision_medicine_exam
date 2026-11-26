@@ -156,4 +156,12 @@ exp(confint.default(model))
 
 ### Interpret the biological significance of your findings and discuss why a high T- cell–inflamed GEP score does not necessarily guarantee treatment response
 
-A high T-cell-inflamed GEP score indicates an immune-inflamed tumor environment; this is not equal to treatment response, but might indicate whether patients are more likely to respond. Other immunosuppressive mechanisms may be active, or tumor cells may escape recognition.
+The 18-gene t-cell-inflamed GEP indicates an immune-inflamed tumor environment. Using a GEP is beneficial, as we are not relying on a single gene but getting a broader pattern of immune activity within the tumor.
+
+This analysis finds that responders to treatment more often had higher GEP scores than non-responders. This is supported both by the Wilcoxon rank-sum test (p = 0.0002149) and, furthermore, the logistic regression (p = 0.00051, Odds Ratio = 3.02)
+
+This suggests that a more T-cell-inflamed tumor microenvironment is associated with an increased likelihood of treatment response.
+
+An important distinction is that a high GEP score does not guarantee treatment response; other immunosuppressive mechanisms may be active, or tumor cells may escape recognition. This is further supported by the boxplot, which shows many overlapping scores between responders and non-responders.
+
+So while these results confirm that a higher GEP score is associated with increased odds of treatment response, the GEP score alone cannot determine whether a patient might respond. Combining complementary biomarkers may provide a more complete picture than any single biomarker, as different biomarkers capture different parts of the antitumor immune response.
